@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Key, ExternalLink, Loader2, Check, Trash2, Shield, Zap,
-  Eye, EyeOff, RefreshCw, CircleDot, Server, Globe,
+  Eye, EyeOff, RefreshCw, CircleDot, Server, Globe, TestTube2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { listApiKeys, saveApiKey, deleteApiKey, setActiveProvider } from '../lib/api-keys-service';
 import type { ApiKeyInfo } from '../lib/api-keys-service';
+import { testConnection } from '../lib/ai-service';
 
 interface SettingsProps {
   userId: string;
@@ -74,6 +75,8 @@ export default function Settings({ userId }: SettingsProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const getToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -116,6 +119,25 @@ export default function Settings({ userId }: SettingsProps) {
     setTimeout(() => setSuccess(''), 3000);
   }
 
+  async function handleTestConnection() {
+    setTesting(true);
+    setTestResult(null);
+    setError('');
+
+    try {
+      const token = await getToken();
+      await testConnection(token);
+      setTestResult({ success: true, message: 'Connection successful! Your AI provider is configured correctly.' });
+    } catch (e) {
+      setTestResult({
+        success: false,
+        message: e instanceof Error ? e.message : 'Connection failed. Please check your configuration.'
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   const activeProvider = keys.find((k) => k.is_active);
   const activeLocalEndpoint = localEndpoints.find((e) => e.is_active);
   const configuredCount = keys.length + localEndpoints.length;
@@ -146,16 +168,47 @@ export default function Settings({ userId }: SettingsProps) {
       </div>
 
       {(activeProvider || activeLocalEndpoint) && (
-        <div className="flex items-center gap-3 bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-3">
-          <Zap size={16} className="text-amber-400" />
-          <p className="text-sm text-slate-300">
-            Active provider: <span className="font-medium text-white">
-              {activeLocalEndpoint
-                ? `${activeLocalEndpoint.provider === 'ollama' ? 'Ollama' : 'LM Studio'} (${activeLocalEndpoint.model_name})`
-                : PROVIDERS.find((p) => p.id === activeProvider?.provider)?.name}
-            </span>
-          </p>
-          <span className="text-xs text-slate-500 ml-auto">{configuredCount} provider{configuredCount !== 1 ? 's' : ''} configured</span>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-3">
+            <Zap size={16} className="text-amber-400" />
+            <p className="text-sm text-slate-300">
+              Active provider: <span className="font-medium text-white">
+                {activeLocalEndpoint
+                  ? `${activeLocalEndpoint.provider === 'ollama' ? 'Ollama' : 'LM Studio'} (${activeLocalEndpoint.model_name})`
+                  : PROVIDERS.find((p) => p.id === activeProvider?.provider)?.name}
+              </span>
+            </p>
+            <span className="text-xs text-slate-500 ml-auto">{configuredCount} provider{configuredCount !== 1 ? 's' : ''} configured</span>
+          </div>
+
+          <button
+            onClick={handleTestConnection}
+            disabled={testing}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-sm rounded-lg transition-all disabled:opacity-50"
+          >
+            {testing ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Testing connection...
+              </>
+            ) : (
+              <>
+                <TestTube2 size={14} />
+                Test Connection
+              </>
+            )}
+          </button>
+
+          {testResult && (
+            <div className={`border rounded-xl px-4 py-3 text-sm flex items-center gap-2 ${
+              testResult.success
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                : 'bg-red-500/10 border-red-500/20 text-red-400'
+            }`}>
+              {testResult.success ? <Check size={14} /> : <Trash2 size={14} />}
+              {testResult.message}
+            </div>
+          )}
         </div>
       )}
 

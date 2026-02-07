@@ -519,6 +519,8 @@ Return JSON:
     }
   ]
 }`,
+
+  "test-connection": `You are a helpful AI assistant. Respond with a simple confirmation that the connection is working.`,
 };
 
 Deno.serve(async (req: Request) => {
@@ -721,6 +723,12 @@ Deno.serve(async (req: Request) => {
         if (!payload?.basePrompt) return errorResponse("Missing basePrompt");
         userPrompt = `Generate 6 creative variations of this base prompt:\n\n"${payload.basePrompt}"`;
         maxTokens = 2000;
+        break;
+      }
+
+      case "test-connection": {
+        userPrompt = "Please respond with 'Connection successful!' to confirm the API is working.";
+        maxTokens = 50;
         break;
       }
     }

@@ -170,6 +170,10 @@ export async function generatePromptVariations(
   return callAI('generate-variations', { basePrompt }, token);
 }
 
+export async function testConnection(token: string): Promise<string> {
+  return callAI('test-connection', {}, token);
+}
+
 export function resizeImageToBase64(file: File, maxSize = 1024): Promise<{ data: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
