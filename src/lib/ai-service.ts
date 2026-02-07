@@ -24,6 +24,21 @@ export async function improvePrompt(prompt: string, token: string): Promise<stri
   return callAI('improve', { prompt }, token);
 }
 
+export interface DetailedImprovement {
+  improved: string;
+  reasoning: string[];
+  alternateVersions: Array<{
+    variation: string;
+    description: string;
+    prompt: string;
+  }>;
+  changesSummary: string;
+}
+
+export async function improvePromptDetailed(prompt: string, token: string): Promise<DetailedImprovement> {
+  return callAI('improve-detailed', { prompt }, token);
+}
+
 export interface StyleAnalysis {
   profile: string;
   themes: string[];

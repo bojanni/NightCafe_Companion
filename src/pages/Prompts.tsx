@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Search, Heart, Wand2, Trash2, Edit3, Copy, Check,
-  SlidersHorizontal, BookTemplate, Filter, ChevronLeft, ChevronRight, Clock,
+  SlidersHorizontal, BookTemplate, Filter, ChevronLeft, ChevronRight, Clock, Sparkles,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { Prompt, Tag } from '../lib/types';
@@ -9,6 +9,7 @@ import Modal from '../components/Modal';
 import PromptEditor from '../components/PromptEditor';
 import VariationGenerator from '../components/VariationGenerator';
 import { PromptHistory } from '../components/PromptHistory';
+import { PromptImprover } from '../components/PromptImprover';
 import StarRating from '../components/StarRating';
 import TagBadge from '../components/TagBadge';
 
@@ -36,6 +37,8 @@ export default function Prompts({ userId }: PromptsProps) {
   const [totalCount, setTotalCount] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const [historyPrompt, setHistoryPrompt] = useState<Prompt | null>(null);
+  const [showImprover, setShowImprover] = useState(false);
+  const [improverPrompt, setImproverPrompt] = useState<Prompt | null>(null);
 
   useEffect(() => {
     loadData();
@@ -129,6 +132,18 @@ export default function Prompts({ userId }: PromptsProps) {
         .eq('id', historyPrompt.id);
 
       setShowHistory(false);
+      loadData();
+    }
+  }
+
+  async function handleApplyImprovement(content: string) {
+    if (improverPrompt) {
+      await supabase
+        .from('prompts')
+        .update({ content, updated_at: new Date().toISOString() })
+        .eq('id', improverPrompt.id);
+
+      setShowImprover(false);
       loadData();
     }
   }
@@ -305,6 +320,16 @@ export default function Prompts({ userId }: PromptsProps) {
                     </button>
                     <button
                       onClick={() => {
+                        setImproverPrompt(prompt);
+                        setShowImprover(true);
+                      }}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-orange-400 hover:bg-slate-800 transition-colors"
+                      title="Improve with AI"
+                    >
+                      <Sparkles size={14} />
+                    </button>
+                    <button
+                      onClick={() => {
                         setHistoryPrompt(prompt);
                         setShowHistory(true);
                       }}
@@ -436,6 +461,20 @@ export default function Prompts({ userId }: PromptsProps) {
             promptId={historyPrompt.id}
             currentContent={historyPrompt.content}
             onRestore={handleRestoreVersion}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={showImprover}
+        onClose={() => setShowImprover(false)}
+        title={`AI Prompt Improvement: ${improverPrompt?.title || 'Untitled'}`}
+        wide
+      >
+        {improverPrompt && (
+          <PromptImprover
+            prompt={improverPrompt.content}
+            onApply={handleApplyImprovement}
           />
         )}
       </Modal>

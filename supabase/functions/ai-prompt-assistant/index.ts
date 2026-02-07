@@ -520,6 +520,51 @@ Return JSON:
   ]
 }`,
 
+  "improve-detailed": `You are an expert AI image prompt engineer for NightCafe Studio. Your job is to take a user's image generation prompt and provide a comprehensive improvement analysis.
+
+Analyze the original prompt and provide:
+1. An improved version of the prompt with better technical terms, composition, lighting, and quality descriptors
+2. Detailed reasoning (3-5 points) explaining what changes were made and why they improve the prompt
+3. Three alternate versions exploring different creative directions (e.g., different artistic styles, moods, or compositions)
+4. A summary of key changes made
+
+Rules:
+- Keep the core subject and intent intact in the improved version
+- Add specific technical terms for quality (8k, ultra detailed, masterpiece, photorealistic)
+- Add lighting descriptors (volumetric lighting, rim light, golden hour, dramatic shadows)
+- Add composition terms (rule of thirds, cinematic, wide angle, close-up portrait)
+- Add style references when appropriate (Studio Ghibli, Greg Rutkowski, Artstation trending)
+- Keep each prompt version under 150 words
+- Make each alternate version distinctly different from the improved version
+
+Return JSON format:
+{
+  "improved": "The improved prompt text",
+  "reasoning": [
+    "Reason 1 for improvement",
+    "Reason 2 for improvement",
+    "Reason 3 for improvement"
+  ],
+  "alternateVersions": [
+    {
+      "variation": "Artistic Style",
+      "description": "Brief description of what makes this version different",
+      "prompt": "Full alternate prompt text"
+    },
+    {
+      "variation": "Mood Shift",
+      "description": "Brief description of what makes this version different",
+      "prompt": "Full alternate prompt text"
+    },
+    {
+      "variation": "Technical Focus",
+      "description": "Brief description of what makes this version different",
+      "prompt": "Full alternate prompt text"
+    }
+  ],
+  "changesSummary": "Brief 1-2 sentence summary of the most important changes"
+}`,
+
   "test-connection": `You are a helpful AI assistant. Respond with a simple confirmation that the connection is working.`,
 };
 
@@ -553,7 +598,7 @@ Deno.serve(async (req: Request) => {
 
     if (!action || !SYSTEM_PROMPTS[action]) {
       return errorResponse(
-        "Invalid action. Use: improve, analyze-style, generate, diagnose, recommend-models, analyze-image, batch-analyze",
+        "Invalid action. Use: improve, improve-detailed, analyze-style, generate, diagnose, recommend-models, analyze-image, batch-analyze, generate-variations, test-connection",
       );
     }
 
@@ -606,6 +651,12 @@ Deno.serve(async (req: Request) => {
       case "improve":
         if (!payload?.prompt) return errorResponse("Missing prompt");
         userPrompt = `Improve this image generation prompt:\n\n${payload.prompt}`;
+        break;
+
+      case "improve-detailed":
+        if (!payload?.prompt) return errorResponse("Missing prompt");
+        userPrompt = `Provide a detailed improvement analysis for this image generation prompt:\n\n"${payload.prompt}"`;
+        maxTokens = 2000;
         break;
 
       case "analyze-style":
@@ -766,7 +817,8 @@ Deno.serve(async (req: Request) => {
       action === "recommend-models" ||
       action === "analyze-image" ||
       action === "batch-analyze" ||
-      action === "generate-variations"
+      action === "generate-variations" ||
+      action === "improve-detailed"
     ) {
       try {
         const jsonMatch = result.match(/\{[\s\S]*\}/);
