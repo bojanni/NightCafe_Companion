@@ -129,9 +129,37 @@ export default function Settings({ userId }: SettingsProps) {
       await testConnection(token);
       setTestResult({ success: true, message: 'Connection successful! Your AI provider is configured correctly.' });
     } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : 'Connection failed';
+
+      const probableCauses = [];
+
+      if (errorMsg.includes('API key') || errorMsg.includes('unauthorized') || errorMsg.includes('401')) {
+        probableCauses.push('Invalid or expired API key');
+      }
+      if (errorMsg.includes('quota') || errorMsg.includes('limit') || errorMsg.includes('429')) {
+        probableCauses.push('API quota exceeded or rate limit reached');
+      }
+      if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('timeout')) {
+        probableCauses.push('Network connectivity issue');
+      }
+      if (errorMsg.includes('model') || errorMsg.includes('404')) {
+        probableCauses.push('Model not found or unavailable');
+      }
+      if (activeLocalEndpoint) {
+        probableCauses.push('Local LLM server not running or unreachable');
+      }
+
+      if (probableCauses.length === 0) {
+        probableCauses.push('Invalid API key or credentials');
+        probableCauses.push('API service temporarily unavailable');
+        probableCauses.push('Network or firewall blocking requests');
+      }
+
+      const detailedMessage = `${errorMsg}\n\nProbable causes:\n${probableCauses.map((c, i) => `${i + 1}. ${c}`).join('\n')}`;
+
       setTestResult({
         success: false,
-        message: e instanceof Error ? e.message : 'Connection failed. Please check your configuration.'
+        message: detailedMessage
       });
     } finally {
       setTesting(false);
@@ -200,13 +228,19 @@ export default function Settings({ userId }: SettingsProps) {
           </button>
 
           {testResult && (
-            <div className={`border rounded-xl px-4 py-3 text-sm flex items-center gap-2 ${
+            <div className={`border rounded-xl px-4 py-3 text-sm ${
               testResult.success
                 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                 : 'bg-red-500/10 border-red-500/20 text-red-400'
             }`}>
-              {testResult.success ? <Check size={14} /> : <Trash2 size={14} />}
-              {testResult.message}
+              <div className="flex items-start gap-2">
+                <div className="shrink-0 mt-0.5">
+                  {testResult.success ? <Check size={14} /> : <Trash2 size={14} />}
+                </div>
+                <div className="whitespace-pre-line leading-relaxed">
+                  {testResult.message}
+                </div>
+              </div>
             </div>
           )}
         </div>
