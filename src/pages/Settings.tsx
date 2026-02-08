@@ -8,6 +8,7 @@ import { listApiKeys, saveApiKey, deleteApiKey, setActiveProvider } from '../lib
 import type { ApiKeyInfo } from '../lib/api-keys-service';
 import { testConnection } from '../lib/ai-service';
 import { ApiKeySchema, LocalEndpointSchema } from '../lib/validation-schemas';
+import { DataManagement } from '../components/DataManagement';
 
 interface SettingsProps {
   userId: string;
@@ -472,6 +473,8 @@ export default function Settings({ userId }: SettingsProps) {
           </div>
         </>
       )}
+
+      <DataManagement userId={userId} />
     </div>
   );
 }
