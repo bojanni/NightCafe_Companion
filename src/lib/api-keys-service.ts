@@ -22,6 +22,7 @@ export interface ApiKeyInfo {
   provider: string;
   key_hint: string;
   is_active: boolean;
+  model_name?: string;
   updated_at: string;
 }
 
@@ -30,14 +31,18 @@ export async function listApiKeys(token: string): Promise<ApiKeyInfo[]> {
   return keys;
 }
 
-export async function saveApiKey(provider: string, apiKey: string, token: string): Promise<{ hint: string; is_active: boolean }> {
-  return callKeyService('save', { provider, apiKey }, token);
+export async function saveApiKey(provider: string, apiKey: string, modelName: string, token: string): Promise<{ hint: string; is_active: boolean }> {
+  return callKeyService('save', { provider, apiKey, modelName }, token);
 }
 
 export async function deleteApiKey(provider: string, token: string): Promise<void> {
   await callKeyService('delete', { provider }, token);
 }
 
-export async function setActiveProvider(provider: string, token: string): Promise<void> {
-  await callKeyService('set-active', { provider }, token);
+export async function setActiveProvider(provider: string, modelName: string, token: string): Promise<void> {
+  await callKeyService('set-active', { provider, modelName }, token);
+}
+
+export async function updateModelSelection(provider: string, modelName: string, token: string): Promise<void> {
+  await callKeyService('update-model', { provider, modelName }, token);
 }

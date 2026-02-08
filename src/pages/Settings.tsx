@@ -4,11 +4,12 @@ import {
   Eye, EyeOff, RefreshCw, CircleDot, Server, Globe, TestTube2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { listApiKeys, saveApiKey, deleteApiKey, setActiveProvider } from '../lib/api-keys-service';
+import { listApiKeys, saveApiKey, deleteApiKey, setActiveProvider, updateModelSelection } from '../lib/api-keys-service';
 import type { ApiKeyInfo } from '../lib/api-keys-service';
 import { testConnection } from '../lib/ai-service';
 import { ApiKeySchema, LocalEndpointSchema } from '../lib/validation-schemas';
 import { DataManagement } from '../components/DataManagement';
+import { getModelsForProvider, getDefaultModelForProvider } from '../lib/provider-models';
 
 interface SettingsProps {
   userId: string;
@@ -273,63 +274,76 @@ export default function Settings({ userId }: SettingsProps) {
               <h2 className="text-lg font-semibold text-white">Cloud Providers</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {PROVIDERS.map((provider) => (
-                <ProviderCard
-                  key={provider.id}
-                  provider={provider}
-                  keyInfo={keys.find((k) => k.provider === provider.id)}
-                  actionLoading={actionLoading}
-                  onSave={async (apiKey) => {
-                    setActionLoading(provider.id);
-                    setError('');
-                    try {
-                      const validated = ApiKeySchema.parse({
-                        provider: provider.id,
-                        api_key: apiKey,
-                        is_active: true,
-                      });
+              {PROVIDERS.map((provider) => {
+                const keyInfo = keys.find((k) => k.provider === provider.id);
+                return (
+                  <ProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    keyInfo={keyInfo}
+                    actionLoading={actionLoading}
+                    onSave={async (apiKey, modelName) => {
+                      setActionLoading(provider.id);
+                      setError('');
+                      try {
+                        const validated = ApiKeySchema.parse({
+                          provider: provider.id,
+                          api_key: apiKey,
+                          is_active: true,
+                        });
 
-                      const token = await getToken();
-                      await saveApiKey(validated.provider, validated.api_key, token);
-                      await loadKeys();
-                      showSuccess(`${provider.name} key saved successfully`);
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : 'Failed to save key');
-                    } finally {
-                      setActionLoading(null);
-                    }
-                  }}
-                  onDelete={async () => {
-                    setActionLoading(`${provider.id}-delete`);
-                    setError('');
-                    try {
-                      const token = await getToken();
-                      await deleteApiKey(provider.id, token);
-                      await loadKeys();
-                      showSuccess(`${provider.name} key removed`);
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : 'Failed to delete key');
-                    } finally {
-                      setActionLoading(null);
-                    }
-                  }}
-                  onSetActive={async () => {
-                    setActionLoading(`${provider.id}-active`);
-                    setError('');
-                    try {
-                      const token = await getToken();
-                      await setActiveProvider(provider.id, token);
-                      await loadKeys();
-                      await loadLocalEndpoints();
-                      showSuccess(`${provider.name} set as active provider`);
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : 'Failed to set active provider');
-                    } finally {
-                      setActionLoading(null);
-                    }
-                  }}
-                />
-              ))}
+                        const token = await getToken();
+                        await saveApiKey(validated.provider, validated.api_key, modelName, token);
+                        await loadKeys();
+                        showSuccess(`${provider.name} key saved successfully`);
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Failed to save key');
+                      } finally {
+                        setActionLoading(null);
+                      }
+                    }}
+                    onDelete={async () => {
+                      setActionLoading(`${provider.id}-delete`);
+                      setError('');
+                      try {
+                        const token = await getToken();
+                        await deleteApiKey(provider.id, token);
+                        await loadKeys();
+                        showSuccess(`${provider.name} key removed`);
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Failed to delete key');
+                      } finally {
+                        setActionLoading(null);
+                      }
+                    }}
+                    onSetActive={async () => {
+                      setActionLoading(`${provider.id}-active`);
+                      setError('');
+                      try {
+                        const token = await getToken();
+                        const modelName = keyInfo?.model_name || getDefaultModelForProvider(provider.id);
+                        await setActiveProvider(provider.id, modelName, token);
+                        await loadKeys();
+                        await loadLocalEndpoints();
+                        showSuccess(`${provider.name} set as active provider`);
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Failed to set active provider');
+                      } finally {
+                        setActionLoading(null);
+                      }
+                    }}
+                    onModelChange={async (modelName) => {
+                      try {
+                        const token = await getToken();
+                        await updateModelSelection(provider.id, modelName, token);
+                        await loadKeys();
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Failed to update model');
+                      }
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
 
@@ -483,9 +497,10 @@ interface ProviderCardProps {
   provider: typeof PROVIDERS[number];
   keyInfo?: ApiKeyInfo;
   actionLoading: string | null;
-  onSave: (apiKey: string) => void;
+  onSave: (apiKey: string, modelName: string) => void;
   onDelete: () => void;
   onSetActive: () => void;
+  onModelChange: (modelName: string) => void;
 }
 
 interface LocalEndpointCardProps {
@@ -497,10 +512,19 @@ interface LocalEndpointCardProps {
   onSetActive: () => void;
 }
 
-function ProviderCard({ provider, keyInfo, actionLoading, onSave, onDelete, onSetActive }: ProviderCardProps) {
+function ProviderCard({ provider, keyInfo, actionLoading, onSave, onDelete, onSetActive, onModelChange }: ProviderCardProps) {
   const [inputValue, setInputValue] = useState('');
   const [showInput, setShowInput] = useState(false);
   const [showKey, setShowKey] = useState(false);
+
+  const models = getModelsForProvider(provider.id);
+  const defaultModel = keyInfo?.model_name || getDefaultModelForProvider(provider.id);
+  const [selectedModel, setSelectedModel] = useState(defaultModel);
+
+  useEffect(() => {
+    const newModel = keyInfo?.model_name || getDefaultModelForProvider(provider.id);
+    setSelectedModel(newModel);
+  }, [keyInfo?.model_name, provider.id]);
 
   const isConfigured = !!keyInfo;
   const isActive = keyInfo?.is_active ?? false;
@@ -556,17 +580,39 @@ function ProviderCard({ provider, keyInfo, actionLoading, onSave, onDelete, onSe
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            {!isActive && (
-              <button
-                onClick={onSetActive}
-                disabled={isSettingActive}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${provider.bgGlow} ${provider.textColor} hover:opacity-80 disabled:opacity-50`}
+          {models.length > 0 && (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Model</label>
+              <select
+                value={selectedModel}
+                onChange={(e) => {
+                  setSelectedModel(e.target.value);
+                  onModelChange(e.target.value);
+                }}
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
               >
-                {isSettingActive ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
-                Set Active
-              </button>
-            )}
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} {model.description && `— ${model.description}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onSetActive}
+              disabled={isSettingActive || isActive}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                isActive
+                  ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed'
+                  : `${provider.bgGlow} ${provider.textColor} hover:opacity-80`
+              } disabled:opacity-50`}
+            >
+              {isSettingActive ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+              {isActive ? 'Active' : 'Activate'}
+            </button>
             <button
               onClick={() => { setShowInput(true); setInputValue(''); }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/50 text-slate-400 text-xs rounded-lg hover:bg-slate-800 hover:text-slate-300 transition-all"
@@ -586,6 +632,23 @@ function ProviderCard({ provider, keyInfo, actionLoading, onSave, onDelete, onSe
         </div>
       ) : (
         <div className="space-y-3">
+          {models.length > 0 && (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Model</label>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-slate-600"
+              >
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} {model.description && `— ${model.description}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="relative">
             <input
               type="password"
@@ -608,7 +671,7 @@ function ProviderCard({ provider, keyInfo, actionLoading, onSave, onDelete, onSe
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                if (inputValue.trim()) onSave(inputValue.trim());
+                if (inputValue.trim()) onSave(inputValue.trim(), selectedModel);
               }}
               disabled={isSaving || !inputValue.trim()}
               className={`flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r ${provider.gradient} text-white text-xs font-medium rounded-lg hover:opacity-90 transition-all disabled:opacity-50 shadow-lg`}

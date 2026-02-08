@@ -13,6 +13,7 @@ const SaveKeySchema = z.object({
   action: z.literal("save"),
   provider: z.enum(["openai", "gemini", "anthropic", "openrouter"]),
   apiKey: z.string().min(8, "API key too short").max(500, "API key too long"),
+  modelName: z.string().optional(),
 });
 
 const DeleteKeySchema = z.object({
@@ -23,6 +24,13 @@ const DeleteKeySchema = z.object({
 const SetActiveSchema = z.object({
   action: z.literal("set-active"),
   provider: z.enum(["openai", "gemini", "anthropic", "openrouter"]),
+  modelName: z.string().optional(),
+});
+
+const UpdateModelSchema = z.object({
+  action: z.literal("update-model"),
+  provider: z.enum(["openai", "gemini", "anthropic", "openrouter"]),
+  modelName: z.string(),
 });
 
 const ListKeysSchema = z.object({
@@ -127,7 +135,7 @@ Deno.serve(async (req: Request) => {
 
         const { data, error } = await adminClient
           .from("user_api_keys")
-          .select("provider, key_hint, is_active, updated_at")
+          .select("provider, key_hint, is_active, model_name, updated_at")
           .eq("user_id", user.id)
           .order("provider");
 
@@ -141,7 +149,7 @@ Deno.serve(async (req: Request) => {
           return errorResponse(validated.error.errors[0].message);
         }
 
-        const { provider, apiKey } = validated.data;
+        const { provider, apiKey, modelName } = validated.data;
         const trimmed = apiKey.trim();
         const encrypted = await encrypt(trimmed, serviceRoleKey);
         const hint = maskKey(trimmed);
@@ -162,6 +170,7 @@ Deno.serve(async (req: Request) => {
               provider,
               encrypted_key: encrypted,
               key_hint: hint,
+              model_name: modelName || null,
               is_active: isFirst,
               updated_at: new Date().toISOString(),
             },
@@ -219,7 +228,7 @@ Deno.serve(async (req: Request) => {
           return errorResponse(validated.error.errors[0].message);
         }
 
-        const { provider } = validated.data;
+        const { provider, modelName } = validated.data;
         const { data: exists } = await adminClient
           .from("user_api_keys")
           .select("id")
@@ -236,9 +245,36 @@ Deno.serve(async (req: Request) => {
           .update({ is_active: false })
           .eq("user_id", user.id);
 
+        await adminClient
+          .from("user_local_endpoints")
+          .update({ is_active: false })
+          .eq("user_id", user.id);
+
+        const updateData: Record<string, unknown> = { is_active: true };
+        if (modelName) {
+          updateData.model_name = modelName;
+        }
+
         const { error } = await adminClient
           .from("user_api_keys")
-          .update({ is_active: true })
+          .update(updateData)
+          .eq("user_id", user.id)
+          .eq("provider", provider);
+
+        if (error) throw error;
+        return jsonResponse({ success: true });
+      }
+
+      case "update-model": {
+        const validated = UpdateModelSchema.safeParse(body);
+        if (!validated.success) {
+          return errorResponse(validated.error.errors[0].message);
+        }
+
+        const { provider, modelName } = validated.data;
+        const { error } = await adminClient
+          .from("user_api_keys")
+          .update({ model_name: modelName })
           .eq("user_id", user.id)
           .eq("provider", provider);
 
@@ -248,7 +284,7 @@ Deno.serve(async (req: Request) => {
 
       default:
         return errorResponse(
-          "Invalid action. Use: list, save, delete, set-active",
+          "Invalid action. Use: list, save, delete, set-active, update-model",
         );
     }
   } catch (err) {
